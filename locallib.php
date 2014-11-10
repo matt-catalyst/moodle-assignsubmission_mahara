@@ -505,7 +505,7 @@ class assign_submission_mahara extends assign_submission_plugin {
       * @param stdClass $submission
       * @return void
       */
-    public function lock($submission, stdClass $flags = null) {
+    public function lock($submission) {
         global $DB;
 
         // If it's in submitted status, then it has already been locked
@@ -536,7 +536,7 @@ class assign_submission_mahara extends assign_submission_plugin {
       * @param stdClass $submission
       * @return void
       */
-    public function unlock($submission, stdClass $flags = null) {
+    public function unlock($submission) {
         global $DB;
 
         // If it has been submitted, it needs to remain locked
