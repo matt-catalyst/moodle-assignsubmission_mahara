@@ -120,7 +120,7 @@ class assignsubmission_mahara_observers {
     */
     protected static function release_submitted_view($maharasubmissionplugin, $maharasubmission) {
         // Relese submitted page, but provide no outcomes.
-        $maharasubmissionplugin->mnet_release_submitted_view(
+        $maharasubmissionplugin->release_submitted_view(
             $maharasubmission->viewid,
             array(),
             $maharasubmission->iscollection
