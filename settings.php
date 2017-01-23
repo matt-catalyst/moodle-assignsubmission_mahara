@@ -31,26 +31,6 @@ $settings->add(
         )
 );
 
-if ($hosts = assignsubmission_mahara_sitelist ()) {
-    $settings->add(
-            new admin_setting_configselect(
-                    'assignsubmission_mahara/host',
-                    new lang_string(
-                            'defaultsite',
-                            'assignsubmission_mahara',
-                            new lang_string('site', 'assignsubmission_mahara')
-                    ),
-                    new lang_string(
-                            'defaultsite_help',
-                            'assignsubmission_mahara',
-                            new lang_string('site', 'assignsubmission_mahara')
-                    ),
-                    key($hosts),
-                    $hosts
-            )
-    );
-}
-
 $settings->add(
     new admin_setting_configselect(
         'assignsubmission_mahara/lock',

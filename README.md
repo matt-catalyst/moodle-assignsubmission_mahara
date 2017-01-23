@@ -1,12 +1,12 @@
 moodle-assignsubmission_mahara
 ============================
 
-Mahara assignment submission plugin for Moodle 2.7 through 3.1 (or higher!).
+Mahara assignment submission plugin for Moodle 2.7 through 3.0.
 - https://github.com/MaharaProject/moodle-assignsubmission_mahara
 
 This plugin adds Mahara page submission functionality to assignments in
 Moodle.  The plugin works with the new "mod/assign" type introduced in 2.3.
-It requires at least one Mahara site linked to Moodle via MNet.
+It requires configuration of Mahara Web Services for REST and OAuth 1.x.
 
 This plugin allows a teacher to add a "Mahara" item to the submission
 options for a Moodle assignment. Students can then select one of the pages
@@ -27,7 +27,7 @@ outcomes artefact plugin.
 Installation
 ------------
 1. Make sure that your Moodle and Mahara versions are up to date.
-2. If you are using Mahara 1.9 or earlier, apply the patch "mahara-patch.txt" to your Mahara site.
+2. If you are using Mahara 16.04 or earlier, apply the patches in branch https://github.com/piersharding/mahara/tree/client_connection_manager.
 3. Copy the contents of this project to mod/assign/submission/mahara in your Moodle site.
 4. Proceed with plugin installation in Moodle.
 5. On the Moodle page "Site Admin" -> "Networking" -> "Peers", choose the Mahara site.
@@ -51,25 +51,9 @@ migrate it accordingly. So all you need to do is:
 NOTE: If you were using the Mahara assignment feedback plugin before, you need
 to upgrade this assignment submission plugin BEFORE uninstalling the assignment
 feedback plugin. This is to allow the per-assignment locking settings from
-the feedback plugin to be migrated into the replacement system in the 
+the feedback plugin to be migrated into the replacement system in the
 submission plugin.
 
-About that patch
-----------------
-
-As you may have noticed in the installation instructions, this plugin may
-require you to apply a patch to your Mahara site. The patch provides
-support for the Mahara web services to handle collections. If you are using
-Mahara 1.10.0 or later, you DO NOT need to apply this patch, as your Mahara
-site will already include this functionality.
-
-For information about how to apply a patch file, try Google. If you are
-using Linux, the process will look something like this:
-
-```Shell
-cd /var/www/path/to/mahara
-patch -p0 < /path/to/mahara-patch.txt
-```
 
 A little info about what it does:
 ---------------------------------
@@ -79,7 +63,7 @@ When a teacher creates an "assignment" activity, they'll see "Mahara" as one of 
 submission method options. This submission method will ask students to select one
 of their pages or collections from Mahara, to include as part of their assignment
 submission. (Therefore, this plugin requires your Moodle site to be connected to a
-Mahara site via MNet.)
+Mahara site via Mahara Web Services.)
 
 * Individual pages that are part of collections cannot be picked on their own (the entire collection must be picked instead).
 * Pages and collections that are already locked due to being submitted to a Mahara group or another Moodle assignment, are also not available.
@@ -88,7 +72,7 @@ Optionally, the assignment may lock the submitted pages and collections
 from being edited in Mahara. This is recommended, because otherwise
 students will be able to continue editing part of their assignment
 submission even after the assignment deadline. The teacher may choose whether
-submitted pages and collection will be unlocked after grading, or when the 
+submitted pages and collection will be unlocked after grading, or when the
 grading workflow state changes to "Released".
 
 If you choose to use locking, note that:

@@ -26,6 +26,33 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+require_once($CFG->libdir.'/oauthlib.php');
+class mahara_oauth extends oauth_helper {
+
+    /**
+     * Request oauth protected resources
+     * @param string $method
+     * @param string $url
+     * @param string $token
+     * @param string $secret
+     */
+    public function request($method, $url, $params=array(), $token='', $secret='') {
+        $token = '';
+        $this->sign_secret = $secret.'&'.$token;  // we never pass the toekn, only the secret
+        if (strtolower($method) === 'post' && !empty($params)) {
+            $oauth_params = $this->prepare_oauth_parameters($url, array('oauth_token'=>$token) + $params, $method);
+        } else {
+            $oauth_params = $this->prepare_oauth_parameters($url, array('oauth_token'=>$token), $method);
+        }
+        $this->setup_oauth_http_header($oauth_params);
+        $content = call_user_func_array(array($this->http, strtolower($method)), array($url, $params, $this->http_options));
+        // reset http header and options to prepare for the next request
+        $this->http->resetHeader();
+        // return request return value
+        return $content;
+    }
+}
+
 /**
  * library class for Mahara submission plugin extending submission plugin base class
  *
@@ -79,41 +106,69 @@ class assign_submission_mahara extends assign_submission_plugin {
         global $CFG;
         require_once($CFG->dirroot . '/mod/assign/submission/mahara/lib.php');
 
-        if ($hosts = assignsubmission_mahara_sitelist()) {
+        $mform->addElement('text', 'assignsubmission_mahara_url', get_string('url', 'assignsubmission_mahara'), array('maxlength' => 255, 'size' => 50));
+        $mform->setType('assignsubmission_mahara_url', PARAM_RAW_TRIMMED);
+        $mform->setDefault('assignsubmission_mahara_url', $this->get_config('url'));
+        $mform->disabledIf('assignsubmission_mahara_url', 'assignsubmission_mahara_enabled', 'notchecked');
 
-            $hostid = $this->get_config('mnethostid');
-            if ($hostid === false) {
-                // No setting for this instance, so use the sitewide default
-                $hostid = get_config('assignsubmission_mahara', 'host');
-            }
+        $mform->addElement('text', 'assignsubmission_mahara_key', get_string('key', 'assignsubmission_mahara'), array('maxlength' => 255, 'size' => 50));
+        $mform->setType('assignsubmission_mahara_key', PARAM_RAW_TRIMMED);
+        $mform->setDefault('assignsubmission_mahara_key', $this->get_config('key'));
+        $mform->disabledIf('assignsubmission_mahara_key', 'assignsubmission_mahara_enabled', 'notchecked');
 
-            $locked = $this->get_config('lock');
-            if ($locked === false) {
-                // No setting for this instance, so use the sitewide default
-                $locked = get_config('assignsubmission_mahara', 'lock');
-            }
+        $mform->addElement('text', 'assignsubmission_mahara_secret', get_string('secret', 'assignsubmission_mahara'), array('maxlength' => 255, 'size' => 50));
+        $mform->setType('assignsubmission_mahara_secret', PARAM_RAW_TRIMMED);
+        $mform->setDefault('assignsubmission_mahara_secret', $this->get_config('secret'));
+        $mform->disabledIf('assignsubmission_mahara_secret', 'assignsubmission_mahara_enabled', 'notchecked');
 
-            // Menu to select which MNet host
-            $mform->addElement('select', 'assignsubmission_mahara_mnethostid', get_string('site', 'assignsubmission_mahara'), $hosts);
-            $mform->setDefault('assignsubmission_mahara_mnethostid', $hostid);
-            $mform->disabledIf('assignsubmission_mahara_mnethostid', 'assignsubmission_mahara_enabled', 'notchecked');
-
-            // Menu to select whether to lock Mahara pages or not
-            $locksettings = array(
-                ASSIGNSUBMISSION_MAHARA_SETTING_DONTLOCK => new lang_string('no'),
-                ASSIGNSUBMISSION_MAHARA_SETTING_KEEPLOCKED => new lang_string('yeskeeplocked', 'assignsubmission_mahara'),
-                ASSIGNSUBMISSION_MAHARA_SETTING_UNLOCK => new lang_string('yesunlock', 'assignsubmission_mahara')
-            );
-            $mform->addElement('select', 'assignsubmission_mahara_lockpages', get_string('lockpages', 'assignsubmission_mahara'), $locksettings);
-            $mform->setDefault('assignsubmission_mahara_lockpages', $locked);
-            $mform->addHelpButton('assignsubmission_mahara_lockpages', 'lockpages', 'assignsubmission_mahara');
-            $mform->disabledIf('assignsubmission_mahara_lockpages', 'assignsubmission_mahara_enabled', 'notchecked');
-        } else {
-            // No hosts found.
-            $mform->addElement('static', 'assignsubmission_mahara_mnethostid', get_string('site', 'assignsubmission_mahara'), get_string('nomaharahostsfound', 'assignsubmission_mahara'));
-            $mform->updateElementAttr('assignsubmission_mahara_enabled', array('disabled' => true));
+        $locked = $this->get_config('lock');
+        if ($locked === false) {
+            // No setting for this instance, so use the sitewide default
+            $locked = get_config('assignsubmission_mahara', 'lock');
         }
-        $mform->addHelpButton('assignsubmission_mahara_mnethostid', 'site', 'assignsubmission_mahara');
+
+        // Menu to select whether to lock Mahara pages or not
+        $locksettings = array(
+            ASSIGNSUBMISSION_MAHARA_SETTING_DONTLOCK => new lang_string('no'),
+            ASSIGNSUBMISSION_MAHARA_SETTING_KEEPLOCKED => new lang_string('yeskeeplocked', 'assignsubmission_mahara'),
+            ASSIGNSUBMISSION_MAHARA_SETTING_UNLOCK => new lang_string('yesunlock', 'assignsubmission_mahara')
+        );
+        $mform->addElement('select', 'assignsubmission_mahara_lockpages', get_string('lockpages', 'assignsubmission_mahara'), $locksettings);
+        $mform->setDefault('assignsubmission_mahara_lockpages', $locked);
+        $mform->addHelpButton('assignsubmission_mahara_lockpages', 'lockpages', 'assignsubmission_mahara');
+        $mform->disabledIf('assignsubmission_mahara_lockpages', 'assignsubmission_mahara_enabled', 'notchecked');
+
+        $mform->addElement('checkbox', 'assignsubmission_mahara_debug', get_string('debug', 'assignsubmission_mahara'));
+        $mform->setDefault('assignsubmission_mahara_debug', $this->get_config('debug'));
+
+        $strrequired = get_string('required');
+        $mform->addRule('assignsubmission_mahara_url', $strrequired, 'required', null, 'client');
+        $mform->addRule('assignsubmission_mahara_key', $strrequired, 'required', null, 'client');
+        $mform->addRule('assignsubmission_mahara_secret', $strrequired, 'required', null, 'client');
+
+        $mform->addHelpButton('assignsubmission_mahara_url', 'url', 'assignsubmission_mahara');
+        $mform->addHelpButton('assignsubmission_mahara_key', 'key', 'assignsubmission_mahara');
+        $mform->addHelpButton('assignsubmission_mahara_secret', 'secret', 'assignsubmission_mahara');
+        // Menu to select which user attribute to use as the remote username
+        $username_attribute = $this->get_config('username_attribute');
+        if ($username_attribute === false) {
+            // No setting for this instance, so use the sitewide default
+            $username_attribute = 'username';
+        }
+        $usernamesettings = array(
+            'username' => new lang_string('username'),
+            'idnumber' => new lang_string('idnumber'),
+            'email' => new lang_string('email'),
+        );
+        $mform->addElement('select', 'assignsubmission_mahara_username_attribute', get_string('username_attribute', 'assignsubmission_mahara'), $usernamesettings);
+        $mform->setDefault('assignsubmission_mahara_username_attribute', $username_attribute);
+        $mform->addHelpButton('assignsubmission_mahara_username_attribute', 'username_attribute', 'assignsubmission_mahara');
+        $mform->disabledIf('assignsubmission_mahara_username_attribute', 'assignsubmission_mahara_enabled', 'notchecked');
+
+        $mform->addElement('checkbox', 'assignsubmission_mahara_remoteuser', get_string('remoteuser', 'assignsubmission_mahara'));
+        $mform->setDefault('assignsubmission_mahara_remoteuser', $this->get_config('remoteuser'));
+        $mform->addHelpButton('assignsubmission_mahara_remoteuser', 'remoteuser', 'assignsubmission_mahara');
+        $mform->disabledIf('assignsubmission_mahara_remoteuser', 'assignsubmission_mahara_enabled', 'notchecked');
     }
 
     /**
@@ -126,17 +181,84 @@ class assign_submission_mahara extends assign_submission_plugin {
         global $CFG;
         require_once($CFG->dirroot . '/mod/assign/submission/mahara/lib.php');
 
-        $hostid = $data->assignsubmission_mahara_mnethostid;
-        if ($hostid && !array_key_exists($hostid, assignsubmission_mahara_sitelist())) {
-            $this->set_error(get_string('errorinvalidhost', 'assignsubmission_mahara'));
+        $this->set_config('url', $data->assignsubmission_mahara_url);
+        $this->set_config('key', $data->assignsubmission_mahara_key);
+        $this->set_config('secret', $data->assignsubmission_mahara_secret);
+        $this->set_config('debug', (isset($data->assignsubmission_mahara_debug) ? $data->assignsubmission_mahara_debug : false));
+        $this->set_config('remoteuser', (isset($data->assignsubmission_mahara_remoteuser) ? $data->assignsubmission_mahara_remoteuser : false));
+        $this->set_config('lock', $data->assignsubmission_mahara_lockpages);
+        $this->set_config('username_attribute', $data->assignsubmission_mahara_username_attribute);
+
+        error_log('config: '.var_export($data, true));
+
+        // test Mahara connection
+        try {
+            $data = $this->webservice_call("mahara_user_get_extended_context", array());
+            $funcs = array();
+            error_log('funcs: '.var_export($data['functions'], true));
+            $required = array("mahara_user_get_extended_context", "mahara_submission_get_views_for_user", "mahara_submission_submit_view_for_assessment", "mahara_submission_release_submitted_view");
+            foreach ($data['functions'] as $v) {
+                $funcs[]= $v['function'];
+            }
+            foreach ($required as $f) {
+                if (!in_array($f, $funcs)) {
+                    $this->set_error(get_string('errorinvalidurl', 'assignsubmission_mahara', 'missing functions: '.implode(", ", $required))."<br/>".get_string('invalidurlhelp', 'assignsubmission_mahara'));
+                    return false;
+                }
+            }
+
+        } catch (Exception $e) {
+            $this->set_error(get_string('errorinvalidurl', 'assignsubmission_mahara', $e->getMessage())."<br/>".get_string('invalidurlhelp', 'assignsubmission_mahara'));
             return false;
         }
 
-        $this->set_config('mnethostid', $hostid);
-        $this->set_config('lock', $data->assignsubmission_mahara_lockpages);
-
         return true;
     }
+
+
+
+    /**
+     * Add elements to user submission form
+     *
+     * @param mixed $submission stdClass|null
+     * @param MoodleQuickForm $mform
+     * @param stdClass $data
+     * @param int $userid
+     * @return bool
+     */
+    public function webservice_call($function, $params, $method="POST") {
+        global $CFG;
+
+        $endpoint = $this->get_config('url').(preg_match('/\/$/', $this->get_config('url')) ? '' : '/').'webservice/rest/server.php';
+        $args = array(
+            'oauth_consumer_key'=> $this->get_config('key'),
+            'oauth_consumer_secret'=> $this->get_config('secret'),
+            'oauth_callback' => 'about:blank',
+            'api_root' => $endpoint,
+        );
+
+        $client = new mahara_oauth($args);
+        if ($CFG->disablesslchecks) {
+            $options = array('CURLOPT_SSL_VERIFYPEER' => 0, 'CURLOPT_SSL_VERIFYHOST' => 0);
+            $client->setup_oauth_http_options($options);
+        }
+        // have to flatten nested parameters into JSON as OAuth can't handle it
+        foreach ($params as $k => $v) {
+            if (is_array($v)) {
+                $params[$k] = json_encode($v);
+            }
+        }
+        $content = $client->request($method, $endpoint,
+                             array_merge($params, array('wsfunction' => $function, 'alt' => 'json')),
+                             null,
+                             $this->get_config('secret'));
+        $data = json_decode($content, true);
+        if (isset($data['error']) && $data['error'] == true ) {
+            throw new Exception("webservice error: ".$data['error_rendered']);
+        }
+        return $data;
+    }
+
 
     /**
      * Add elements to user submission form
@@ -148,7 +270,7 @@ class assign_submission_mahara extends assign_submission_plugin {
      * @return bool
      */
     public function get_form_elements_for_user($submission, MoodleQuickForm $mform, stdClass $data, $userid) {
-        global $DB, $PAGE;
+        global $DB, $PAGE, $CFG;
 
         $PAGE->requires->js('/mod/assign/submission/mahara/js/popup.js');
         $PAGE->requires->js('/mod/assign/submission/mahara/js/filter.js');
@@ -166,7 +288,7 @@ class assign_submission_mahara extends assign_submission_plugin {
         }
 
         // Getting views (pages) user have in linked site.
-        $views = $this->mnet_get_views();
+        $views = $this->get_views();
         if (!$views) {
             $views = array(
                     'data' => array(),
@@ -208,9 +330,15 @@ class assign_submission_mahara extends assign_submission_plugin {
 	    $viewids = $views['ids'];
 
         // Prepare the header.
-        $remotehost = $DB->get_record('mnet_host', array('id'=>$this->get_config('mnethostid')));
-        $url = new moodle_url('/auth/mnet/jump.php', array('hostid' => $remotehost->id));
-        $remotehost->jumpurl = $url->out();
+        try {
+            $remotehost = (object)$this->webservice_call("mahara_user_get_extended_context", array());
+        } catch (Exception $e) {
+            debugging("Remote host webservice call failed: ".$e->getCode().":".$e->getMessage());
+            throw new moodle_exception('errorwsrequest', 'assignsubmission_mahara', '', $e->getMessage());
+        }
+
+        $remotehost->jumpurl = $remotehost->siteurl;
+        $remotehost->name = $remotehost->sitename;
 
         // See if any of views are already in use, we will remove them from select.
         if (count($viewids) || count($views['collections']['data'])) {
@@ -227,12 +355,20 @@ class assign_submission_mahara extends assign_submission_plugin {
             $mform->addElement('html', '<hr/><br/>');
 
             if (count($views['data'])) {
-                $mform->addElement('static', 'view_by',
-                    get_string('viewsby', 'assignsubmission_mahara', $views['displayname'])
+                $users = get_users_by_capability($PAGE->context, 'mod/assign:grade');
+                $names = array();
+                foreach ($users as $u) {
+                    $names[]= fullname($u, true).(empty($u->{$this->get_config('username_attribute')}) ? '' : ' ('.$u->{$this->get_config('username_attribute')}.')');
+                }
+                $names = implode(', ', $names);
+
+                $mform->addElement('static', '',
+                    get_string('viewsby', 'assignsubmission_mahara', $views['displayname']),
+                    get_string('sharewith', 'assignsubmission_mahara', array('site' => $remotehost->name, 'names' => $names))
                 );
+
                 foreach ($views['data'] as $view) {
-                    $viewurl = $this->get_view_url($view['url']);
-                    $anchor = $this->get_preview_url($view['title'], $viewurl, strip_tags($view['description']));
+                    $anchor = $this->get_preview_url($view['title'], $view['url'], strip_tags($view['description']));
                     $mform->addElement('radio', 'viewid', '', $anchor, 'v' . $view['id']);
                 }
             }
@@ -241,8 +377,7 @@ class assign_submission_mahara extends assign_submission_plugin {
                     get_string('collectionsby', 'assignsubmission_mahara', $views['displayname'])
                 );
                 foreach ($views['collections']['data'] as $coll) {
-                    $collurl = $this->get_view_url($coll['url']);
-                    $anchor = $this->get_preview_url($coll['name'], $collurl, strip_tags($coll['description']));
+                    $anchor = $this->get_preview_url($coll['name'], $coll['url'], strip_tags($coll['description']));
                     $mform->addElement('radio', 'viewid', '', $anchor, 'c' . $coll['id']);
                 }
             }
@@ -278,36 +413,47 @@ class assign_submission_mahara extends assign_submission_plugin {
      * @param string $query Search query
      * @return mixed
      */
-    public function mnet_get_views($query = '') {
-        global $USER, $DB;
-        static $mnetwwwroot = null;
-        $result = $this->mnet_send_request('get_views_for_user', array($USER->username, $query));
+    public function get_views($query = '') {
+        global $USER, $DB, $CFG, $PAGE;
+        require_once($CFG->dirroot . '/mod/assign/submission/mahara/lib.php');
 
-        // HACK: Mahara get_views_for_user() has a bug where it returns the full URL for collections
-        // instead of the partial URL. Check to see if we're dealing with an unpatched Mahara and deal with it
-        // if so.
-        if (
-                is_array($result)
-                && array_key_exists('collections', $result)
-                && array_key_exists('data', $result['collections'])
-        ) {
-            foreach ($result['collections']['data'] as $i => $coll) {
-                // Check to see if the URL is absolute
-                if (strpos($coll['url'], 'http://') === 0 || strpos($coll['url'], 'https://') === 0) {
-
-                    // Cache the mnet wwwroot
-                    if ($mnetwwwroot == null) {
-                        $mnetwwwroot = $DB->get_field('mnet_host', 'wwwroot', array('id'=>$this->get_config('mnethostid')), MUST_EXIST);
-                    }
-
-                    $result['collections']['data'][$i]['fullurl'] = $coll['url'];
-                    $result['collections']['data'][$i]['url'] = substr($coll['url'], strlen($mnetwwwroot));
-                }
+        $username = (!empty($CFG->mahara_test_user) ? $CFG->mahara_test_user : $USER->{$this->get_config('username_attribute')});
+   
+        $field = 
+        // now the trump all - we actually want to test against the istitutions auth instances remoteuser.
+            ($this->get_config('remoteuser') ? 
+             'remoteuser' : 
+        // else idnumber maps to studentid
+             ($this->get_config('username_attribute') == 'idnumber' ?
+             'studentid' : 
+        // else the same attribute name in Mahara
+             $this->get_config('username_attribute')));
+   
+        try {
+            $result = $this->webservice_call("mahara_submission_get_views_for_user",
+                                      array('users' => array( array($field => $username,
+                                                                    'query' => $query),)));
+            $result = array_pop($result);
+            // if (is_string($result) || empty($result)){
+            //     throw new Exception("mahara_submission_get_views_for_user failed: ".$result);
+            // }
+            // explode comma separated integer string
+            $result['views']['ids'] = array_map('intval', explode(',', $result['views']['ids']));
+            // overwrite url with full URL
+            foreach ($result['views']['data'] as $key => $value) {
+                $result['views']['data'][$key]['url'] = $result['views']['data'][$key]['fullurl'];
             }
+           foreach ($result['views']['collections']['data'] as $key => $value) {
+                $result['views']['collections']['data'][$key]['url'] = $result['views']['collections']['data'][$key]['fullurl'];
+            }
+        } catch (Exception $e) {
+            debugging("Get views webservice call failed: ".$e->getCode().":".$e->getMessage());
+            throw new moodle_exception('errorwsrequest', 'assignsubmission_mahara', '', $e->getMessage());
         }
 
-        return $result;
+        return $result['views'];
     }
+
 
     /**
      * Submit view or collection for assessment in Mahara. This marks the view/collection
@@ -321,8 +467,8 @@ class assign_submission_mahara extends assign_submission_plugin {
      * @param $viewownermoodleid ID of the view ower's Moodle user record
      * @return mixed
      */
-    public function mnet_submit_view($submission, $viewid, $iscollection, $viewownermoodleid = null) {
-        global $USER, $DB;
+    public function submit_view($submission, $viewid, $iscollection, $viewownermoodleid = null) {
+        global $USER, $DB, $CFG;
 
         // Verify that it's not already submitted to another Mahara assignment in this Moodle site.
         // We can't do this on the Mahara side, because Mahara only knows the remote site's wwwroot.
@@ -342,12 +488,31 @@ class assign_submission_mahara extends assign_submission_plugin {
         }
 
         if (!$viewownermoodleid) {
-            $username = $USER->username;
+            $username = $USER->{$this->get_config('username_attribute')};
         }
         else {
-            $username = $DB->get_field('user', 'username', array('id'=>$viewownermoodleid));
+            $username = $DB->get_field('user', $this->get_config('username_attribute'), array('id'=>$viewownermoodleid));
         }
-        return $this->mnet_send_request('submit_view_for_assessment', array($username, $viewid, $iscollection));
+
+
+        require_once($CFG->dirroot . '/mod/assign/submission/mahara/lib.php');
+        $username = (!empty($CFG->mahara_test_user) ? $CFG->mahara_test_user : $username);
+        try {
+            $result  = $this->webservice_call(
+                       'mahara_submission_submit_view_for_assessment',
+                       array('views' => array( array('username' => $username,
+                                                      'viewid' => $viewid,
+                                                      'iscollection' => $iscollection,
+                                                      'lock' => true,
+                                                      'apilevel' => 'moodle-assignsubmission-mahara:2',
+                                                      'wwwroot' => $CFG->wwwroot),))
+                       );
+            $result = array_pop($result);
+        } catch (Exception $e) {
+            debugging("Submit view for assessment webservice call failed: ".$e->getCode().":".$e->getMessage());
+            throw new moodle_exception('errorwsrequest', 'assignsubmission_mahara', '', $e->getMessage());
+        }
+        return $result;
     }
 
     /**
@@ -359,55 +524,25 @@ class assign_submission_mahara extends assign_submission_plugin {
      * @param boolean $iscollection Whether the $viewid is a view or a collection
      * @return mixed
      */
-    public function mnet_release_submitted_view($viewid, $viewoutcomes, $iscollection = false) {
+    public function release_submitted_view($viewid, $viewoutcomes, $iscollection = false) {
         global $USER;
-        return $this->mnet_send_request('release_submitted_view', array($viewid, $viewoutcomes, $USER->username, $iscollection));
+        try {
+            $username = $USER->username;
+            $result  = $this->webservice_call(
+                       'mahara_submission_release_submitted_view',
+                       array('views' => array( array('username' => $username,
+                                                      'viewid' => $viewid,
+                                                      'iscollection' => $iscollection,
+                                                      'viewoutcomes' => implode(',', $viewoutcomes),)))
+                       );
+
+        } catch (Exception $e) {
+            debugging("Submit view for assessment webservice call failed: ".$e->getCode().":".$e->getMessage());
+            throw new moodle_exception('errorwsrequest', 'assignsubmission_mahara', '', $e->getMessage());
+        }
+        return $result;
     }
 
-    /**
-     * Send Mnet request to Mahara portfolio.
-     *
-     * @global stdClass $CFG
-     * @param string $methodname name of remote method to call
-     * @param array $parameters list of method parameters
-     * @return mixed $responsedata Mnet response
-     */
-    private function mnet_send_request($methodname, $parameters) {
-        global $CFG;
-
-        $error = false;
-        $responsedata = false;
-        if (!is_enabled_auth('mnet')) {
-            $error = get_string('authmnetdisabled', 'mnet');
-        } else if (!has_capability('moodle/site:mnetlogintoremote', context_system::instance())) {
-            $error = get_string('notpermittedtojump', 'mnet');
-        } else {
-            // Set up the RPC request.
-            require_once $CFG->dirroot . '/mnet/xmlrpc/client.php';
-            require_once $CFG->dirroot . '/mnet/peer.php';
-            $mnetpeer = new mnet_peer();
-            $mnetpeer->set_id($this->get_config('mnethostid'));
-            $mnetrequest = new mnet_xmlrpc_client();
-            $mnetrequest->set_method('mod/mahara/rpclib.php/' . $methodname);
-            foreach ($parameters as $parameter) {
-                $mnetrequest->add_param($parameter);
-            }
-
-            if ($mnetrequest->send($mnetpeer) === true) {
-                $responsedata = $mnetrequest->response;
-            } else {
-                $error = "RPC mod/mahara/rpclib.php/" . $methodname . ":<br/>";
-                foreach ($mnetrequest->error as $errormessage) {
-                    list($code, $errormessage) = array_map('trim',explode(':', $errormessage, 2));
-                    $error .= "ERROR $code:<br/>$errormessage<br/>";
-                }
-            }
-        }
-        if ($error) {
-            $this->set_error($error);
-        }
-        return $responsedata;
-    }
 
      /**
       * Save submission data to the database
@@ -440,9 +575,9 @@ class assign_submission_mahara extends assign_submission_plugin {
                 );
             }
 
-            if (!$views = $this->mnet_get_views()) {
+            if (!$views = $this->get_views()) {
                 // Wrap recorded error in language string and return false.
-                $this->set_error(get_string('errormnetrequest', 'assignsubmission_mahara', $this->get_error()));
+                $this->set_error(get_string('errorrequest', 'assignsubmission_mahara', $this->get_error()));
                 return false;
             }
 
@@ -501,9 +636,9 @@ class assign_submission_mahara extends assign_submission_plugin {
                 if ($maharasubmission) {
                     // Unlock the previously selected page
                     if ($maharasubmission->viewstatus == self::STATUS_SUBMITTED) {
-                        $response = $this->mnet_release_submitted_view($maharasubmission->viewid, array(), $maharasubmission->iscollection);
+                        $response = $this->release_submitted_view($maharasubmission->viewid, array(), $maharasubmission->iscollection);
                         if ($response === false) {
-                            throw new moodle_exception('errormnetrequest', 'assignsubmission_mahara', '', $this->get_error());
+                            throw new moodle_exception('errorrequest', 'assignsubmission_mahara', '', $this->get_error());
                         }
                     }
                     // Delete the record of the previously selected page from our submission, and exit
@@ -515,8 +650,8 @@ class assign_submission_mahara extends assign_submission_plugin {
             }
 
             // Lock submission on mahara side.
-            if (!$response = $this->mnet_submit_view($submission, $data->viewid, $iscollection)) {
-                throw new moodle_exception('errormnetrequest', 'assignsubmission_mahara', '', $this->get_error());
+            if (!$response = $this->submit_view($submission, $data->viewid, $iscollection)) {
+                throw new moodle_exception('errorrequest', 'assignsubmission_mahara', '', $this->get_error());
             }
 
             // If we're not locking user pages, then immediately release the page. This will leave it unlocked,
@@ -524,7 +659,7 @@ class assign_submission_mahara extends assign_submission_plugin {
             // TODO: Replace this hack with something more robust. It's an oversight and a security hole, that the
             // access code remains in place in Mahara when you release the page via XML-RPC.
             if (!$this->get_config('lock')) {
-                $this->mnet_release_submitted_view($data->viewid, array(), $iscollection);
+                $this->release_submitted_view($data->viewid, array(), $iscollection);
                 $status = self::STATUS_RELEASED;
             } else {
                 $status = self::STATUS_SUBMITTED;
@@ -570,8 +705,8 @@ class assign_submission_mahara extends assign_submission_plugin {
             if ($maharasubmission) {
                 // If we are updating previous submission, release previous submission first (if it's locked).
                 if ($maharasubmission->viewid != $data->viewid && $maharasubmission->viewstatus == self::STATUS_SUBMITTED) {
-                    if ($this->mnet_release_submitted_view($maharasubmission->viewid, array(), $maharasubmission->iscollection) === false) {
-                        throw new moodle_exception('errormnetrequest', 'assignsubmission_mahara', '', $this->get_error());
+                    if ($this->release_submitted_view($maharasubmission->viewid, array(), $maharasubmission->iscollection) === false) {
+                        throw new moodle_exception('errorrequest', 'assignsubmission_mahara', '', $this->get_error());
                     }
                 }
 
@@ -645,15 +780,15 @@ class assign_submission_mahara extends assign_submission_plugin {
 
         $maharasubmission = $this->get_mahara_submission($submission->id);
         // Lock view on Mahara side as it has been submitted for assessment.
-        if (!$response = $this->mnet_submit_view($submission, $maharasubmission->viewid, $maharasubmission->iscollection)) {
-            throw new moodle_exception('errormnetrequest', 'assignsubmission_mahara', '', $this->get_error());
+        if (!$response = $this->submit_view($submission, $maharasubmission->viewid, $maharasubmission->iscollection)) {
+            throw new moodle_exception('errorrequest', 'assignsubmission_mahara', '', $this->get_error());
         }
         $maharasubmission->viewurl = $response['url'];
         $maharasubmission->viewstatus = self::STATUS_SUBMITTED;
 
         if (!$this->get_config('lock')) {
-            if ($this->mnet_release_submitted_view($maharasubmission->viewid, array(), $maharasubmission->iscollection) === false) {
-                throw new moodle_exception('errormnetrequest', 'assignsubmission_mahara', '', $this->get_error());
+            if ($this->release_submitted_view($maharasubmission->viewid, array(), $maharasubmission->iscollection) === false) {
+                throw new moodle_exception('errorrequest', 'assignsubmission_mahara', '', $this->get_error());
             }
             $maharasubmission->viewstatus = self::STATUS_RELEASED;
         }
@@ -686,8 +821,8 @@ class assign_submission_mahara extends assign_submission_plugin {
         }
 
         // Lock view on Mahara side
-        if (!$response = $this->mnet_submit_view($submission, $maharasubmission->viewid, $maharasubmission->iscollection, $submission->userid)) {
-            throw new moodle_exception('errormnetrequest', 'assignsubmission_mahara', '', $this->get_error());
+        if (!$response = $this->submit_view($submission, $maharasubmission->viewid, $maharasubmission->iscollection, $submission->userid)) {
+            throw new moodle_exception('errorrequest', 'assignsubmission_mahara', '', $this->get_error());
         }
         $maharasubmission->viewurl = $response['url'];
         $maharasubmission->viewstatus = self::STATUS_SUBMITTED;
@@ -718,8 +853,8 @@ class assign_submission_mahara extends assign_submission_plugin {
         }
 
         // Unlock view on Mahara side as it has been unlocked.
-        if ($this->mnet_release_submitted_view($maharasubmission->viewid, array(), $maharasubmission->iscollection) === false) {
-            throw new moodle_exception('errormnetrequest', 'assignsubmission_mahara', '', $this->get_error());
+        if ($this->release_submitted_view($maharasubmission->viewid, array(), $maharasubmission->iscollection) === false) {
+            throw new moodle_exception('errorrequest', 'assignsubmission_mahara', '', $this->get_error());
         }
         $this->set_mahara_submission_status($maharasubmission->submission, self::STATUS_RELEASED);
     }
@@ -744,8 +879,8 @@ class assign_submission_mahara extends assign_submission_plugin {
         $maharasubmission = $this->get_mahara_submission($submission->id);
         if ($maharasubmission->viewstatus === self::STATUS_SUBMITTED) {
             // Unlock view on Mahara side as it has been reverted to draft.
-            if ($this->mnet_release_submitted_view($maharasubmission->viewid, array(), $maharasubmission->iscollection) === false) {
-                throw new moodle_exception('errormnetrequest', 'assignsubmission_mahara', '', $this->get_error());
+            if ($this->release_submitted_view($maharasubmission->viewid, array(), $maharasubmission->iscollection) === false) {
+                throw new moodle_exception('errorrequest', 'assignsubmission_mahara', '', $this->get_error());
             }
             $this->set_mahara_submission_status($submission->id, self::STATUS_RELEASED);
         }
@@ -762,21 +897,6 @@ class assign_submission_mahara extends assign_submission_plugin {
         return empty($maharasubmission);
     }
 
-    /**
-     * Get view URL
-     *
-     * @param stdClass $maharasubmission assignsubmission_mahara record
-     * @return stdClass $url Moodle URL object
-     */
-    public function get_view_url($viewurl) {
-        global $DB;
-        $remotehost = $DB->get_record('mnet_host', array('id'=>$this->get_config('mnethostid')));
-        $url = new moodle_url('/auth/mnet/jump.php', array(
-            'hostid' => $remotehost->id,
-            'wantsurl' => $viewurl,
-        ));
-        return $url;
-    }
 
     /**
      * Gets the preview (popup) and link out for the portfolio
@@ -787,12 +907,16 @@ class assign_submission_mahara extends assign_submission_plugin {
      * @return string
      */
     public function get_preview_url($name, $url, $title = null) {
-        global $OUTPUT;
+        global $OUTPUT, $PAGE;
+
+        $cm = $PAGE->cm;
 
         $icon = $OUTPUT->pix_icon('t/preview', $name);
-        $params = array('target' => '_blank', 'title' => $title ?: $name);
+        $params = array('title' => $title ?: $name);
 
-        $popup_icon = html_writer::link($url, $icon, $params + array(
+        $url = new moodle_url('/mod/assign/submission/mahara/launch.php', array('url' => $url, 'id' => $cm->id));
+
+        $popup_icon = html_writer::link($url->out(false), $icon, $params + array(
           'class' => 'portfolio popup',
         ));
 
@@ -829,9 +953,7 @@ class assign_submission_mahara extends assign_submission_plugin {
                 $result .= get_string('previousattemptsnotvisible', 'assignsubmission_mahara');
             } else {
                 // Either the page is viewed by the author or access code has been issued
-                $remotehost = $DB->get_record('mnet_host', array('id'=>$this->get_config('mnethostid')));
-                $url = $this->get_view_url($maharasubmission->viewurl);
-                return $this->get_preview_url($maharasubmission->viewtitle, $url);
+                return $this->get_preview_url($maharasubmission->viewtitle, $maharasubmission->viewurl);
             }
         }
         return $result;
@@ -871,7 +993,7 @@ class assign_submission_mahara extends assign_submission_plugin {
      * @return bool Was it a success?
      */
     public function upgrade_settings(context $oldcontext, stdClass $oldassignment, & $log) {
-        $this->set_config('mnethostid', $oldassignment->var2);
+        // $this->set_config('mnethostid', $oldassignment->var2);
         return true;
     }
 
@@ -919,7 +1041,16 @@ class assign_submission_mahara extends assign_submission_plugin {
      */
     public function format_for_log(stdClass $submission) {
         global $DB;
-        $remotehost = $DB->get_record('mnet_host', array('id'=>$this->get_config('mnethostid')));
+        try {
+
+            $remotehost = (object)$this->webservice_call("mahara_user_get_extended_context", array());
+        } catch (Exception $e) {
+            debugging("Remote host webservice call failed: ".$e->getCode().":".$e->getMessage());
+            throw new moodle_exception('errorwsrequest', 'assignsubmission_mahara', '', $e->getMessage());
+        }
+        $remotehost->jumpurl = $remotehost->siteurl;
+        $remotehost->name = $remotehost->sitename;
+
         if ($maharasubmission = $this->get_mahara_submission($submission->id)) {
             $maharasubmission->remotehostname = $remotehost->name;
             $output = get_string('outputforlog', 'assignsubmission_mahara', $maharasubmission);
@@ -946,10 +1077,10 @@ class assign_submission_mahara extends assign_submission_plugin {
                 )
         );
         foreach ($records as $record) {
-            if ($this->mnet_release_submitted_view($record->viewid, array(), $record->iscollection) === false) {
+            if ($this->release_submitted_view($record->viewid, array(), $record->iscollection) === false) {
                 // A problem on the Mahara side should not prevent the assignment from being deleted.
                 // But it's worth printing a message to the error logs.
-                debugging(get_string('errormnetrequest', 'assignsubmission_mahara', $this->get_error()));
+                debugging(get_string('errorrequest', 'assignsubmission_mahara', $this->get_error()));
             }
         }
         // Now delete records.
@@ -970,8 +1101,8 @@ class assign_submission_mahara extends assign_submission_plugin {
         // the student can make improvements and then resubmit.
         $maharasubmission = $this->get_mahara_submission($oldsubmission->id);
         if ($maharasubmission && $maharasubmission->viewstatus == self::STATUS_SUBMITTED) {
-            if ($this->mnet_release_submitted_view($maharasubmission->viewid, array(), $maharasubmission->iscollection) === false) {
-                throw new moodle_exception('errormnetrequest', 'assignsubmission_mahara', '', $this->get_error());
+            if ($this->release_submitted_view($maharasubmission->viewid, array(), $maharasubmission->iscollection) === false) {
+                throw new moodle_exception('errorrequest', 'assignsubmission_mahara', '', $this->get_error());
             }
             $this->set_mahara_submission_status($maharasubmission->submission, self::STATUS_RELEASED);
         }
