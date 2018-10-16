@@ -297,37 +297,37 @@ class assign_submission_mahara extends assign_submission_plugin {
             );
         }
 
-	    // Filter out collection views, special views, and already-submitted views (except the current one)
-	    foreach ($views['data'] as $i => $view) {
-	        if (
-	                $view['collid']
-	                || $view['type'] != 'portfolio'
-	                || (
-	                        $view['submittedtime']
-	                        && !($view['id'] == $selectedid && $selectediscollection == false)
-	                )
-	        ) {
-	            unset($views['ids'][$i]);
-	            unset($views['data'][$i]);
-	            $views['count']--;
-	        }
-	    }
-	    // Filter out empty or submitted collections
-	    foreach ($views['collections']['data'] as $i => $coll) {
-	        if (
-	                (
-	                        array_key_exists('numviews', $coll)
-	                        && $coll['numviews'] == 0
-	                ) || (
-	                        $coll['submittedtime']
-	                        && !($coll['id'] == $selectedid && $selectediscollection == true)
-	                )
-	        ) {
-	            unset($views['collections']['data'][$i]);
-	            $views['collections']['count']--;
-	        }
-	    }
-	    $viewids = $views['ids'];
+        // Filter out collection views, special views, and already-submitted views (except the current one)
+        foreach ($views['data'] as $i => $view) {
+            if (
+                    $view['collid']
+                    || $view['type'] != 'portfolio'
+                    || (
+                            $view['submittedtime']
+                            && !($view['id'] == $selectedid && $selectediscollection == false)
+                    )
+            ) {
+                unset($views['ids'][$i]);
+                unset($views['data'][$i]);
+                $views['count']--;
+            }
+        }
+        // Filter out empty or submitted collections
+        foreach ($views['collections']['data'] as $i => $coll) {
+            if (
+                    (
+                            array_key_exists('numviews', $coll)
+                            && $coll['numviews'] == 0
+                    ) || (
+                            $coll['submittedtime']
+                            && !($coll['id'] == $selectedid && $selectediscollection == true)
+                    )
+            ) {
+                unset($views['collections']['data'][$i]);
+                $views['collections']['count']--;
+            }
+        }
+        $viewids = $views['ids'];
 
         // Prepare the header.
         try {
@@ -337,7 +337,7 @@ class assign_submission_mahara extends assign_submission_plugin {
             throw new moodle_exception('errorwsrequest', 'assignsubmission_mahara', '', $e->getMessage());
         }
 
-        $remotehost->jumpurl = $remotehost->siteurl;
+        $remotehost->jumpurl = $CFG->wwwroot.'/mod/assign/submission/mahara/launch.php?id='.$PAGE->cm->id.'&url='.urlencode($remotehost->siteurl).'&sesskey='.sesskey();
         $remotehost->name = $remotehost->sitename;
 
         // See if any of views are already in use, we will remove them from select.
@@ -358,7 +358,7 @@ class assign_submission_mahara extends assign_submission_plugin {
                 $users = get_users_by_capability($PAGE->context, 'mod/assign:grade');
                 $names = array();
                 foreach ($users as $u) {
-                    $names[]= fullname($u, true).(empty($u->{$this->get_config('username_attribute')}) ? '' : ' ('.$u->{$this->get_config('username_attribute')}.')');
+                    $names[] = fullname($u, true).(empty($u->{$this->get_config('username_attribute')}) ? '' : ' ('.$u->{$this->get_config('username_attribute')}.')');
                 }
                 $names = implode(', ', $names);
 
@@ -418,7 +418,7 @@ class assign_submission_mahara extends assign_submission_plugin {
         require_once($CFG->dirroot . '/mod/assign/submission/mahara/lib.php');
 
         $username = (!empty($CFG->mahara_test_user) ? $CFG->mahara_test_user : $USER->{$this->get_config('username_attribute')});
-   
+
         $field = 
         // now the trump all - we actually want to test against the istitutions auth instances remoteuser.
             ($this->get_config('remoteuser') ? 
@@ -505,7 +505,7 @@ class assign_submission_mahara extends assign_submission_plugin {
                                                       'iscollection' => $iscollection,
                                                       'lock' => true,
                                                       'apilevel' => 'moodle-assignsubmission-mahara:2',
-                                                      'wwwroot' => $CFG->wwwroot),))
+            ),))
                        );
             $result = array_pop($result);
         } catch (Exception $e) {
@@ -734,14 +734,14 @@ class assign_submission_mahara extends assign_submission_plugin {
                     $maharasubmission->viewstatus = $status;
                     $maharasubmission->iscollection = (int) $iscollection;
 
-		            $maharasubmission->submission = $submission->id;
-		            $maharasubmission->assignment = $this->assignment->get_instance()->id;
-		            $maharasubmission->id = $DB->insert_record('assignsubmission_mahara', $maharasubmission);
-		            $params['objectid'] = $maharasubmission->id;
-		            $event = \assignsubmission_mahara\event\submission_created::create($params);
-		            $event->set_assign($this->assignment);
-		            $event->trigger();
-		            return $maharasubmission->id > 0;
+                    $maharasubmission->submission = $submission->id;
+                    $maharasubmission->assignment = $this->assignment->get_instance()->id;
+                    $maharasubmission->id = $DB->insert_record('assignsubmission_mahara', $maharasubmission);
+                    $params['objectid'] = $maharasubmission->id;
+                    $event = \assignsubmission_mahara\event\submission_created::create($params);
+                    $event->set_assign($this->assignment);
+                    $event->trigger();
+                    return $maharasubmission->id > 0;
                 }
             }
         }
@@ -914,7 +914,7 @@ class assign_submission_mahara extends assign_submission_plugin {
         $icon = $OUTPUT->pix_icon('t/preview', $name);
         $params = array('title' => $title ?: $name);
 
-        $url = new moodle_url('/mod/assign/submission/mahara/launch.php', array('url' => $url, 'id' => $cm->id));
+        $url = new moodle_url('/mod/assign/submission/mahara/launch.php', array('url' => $url, 'id' => $cm->id, 'sesskey' => sesskey()));
 
         $popup_icon = html_writer::link($url->out(false), $icon, $params + array(
           'class' => 'portfolio popup',

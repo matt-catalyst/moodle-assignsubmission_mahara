@@ -22,27 +22,13 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-global $USER, $DB, $CFG;
+require("../../../../config.php");
 
-require_once("../../../../config.php");
 require_once($CFG->dirroot.'/mod/lti/lib.php');
 require_once($CFG->dirroot.'/mod/lti/locallib.php');
 require_once($CFG->dirroot . '/mod/assign/locallib.php');
 
-
-function mahara_assignsubmission_get_config ($id, $setting) {
-    global $DB;
-
-    $dbparams = array('assignment' => $id,
-                      'plugin' => 'mahara',
-                      'subtype' => 'assignsubmission',
-                      'name' => $setting);
-    $result = $DB->get_record('assign_plugin_config', $dbparams, '*', IGNORE_MISSING);
-    if ($result) {
-        return $result->value;
-    }
-    return false;
-}
+confirm_sesskey();
 
 $id = required_param('id', PARAM_INT); // assignment id
 $target = required_param('url', PARAM_URL); // Mahara view launch
@@ -78,7 +64,7 @@ $requestparams = array(
         'resource_link_description' => $cm->name,
         'user_id' => $USER->id,
         'lis_person_sourcedid' => $USER->idnumber,
-        'roles' => 'Viewer',
+        'roles' => 'Learner',
         'context_id' => $course->id,
         'context_label' => $course->shortname,
         'context_title' => $course->fullname,
@@ -99,7 +85,7 @@ $requestparams = array(
         'lti_message_type' => 'basic-lti-launch-request',
         "tool_consumer_instance_guid" => $urlparts['host'],
         'tool_consumer_instance_name' => get_site()->fullname,
-        'wsfunction' => 'mahara_autologin_redirect',
+        'wsfunction' => 'module_lti_launch',
         );
 
 
@@ -119,3 +105,17 @@ $content = lti_post_launch_html($parms, $endpoint, $debuglaunch);
 
 echo $content;
 
+
+function mahara_assignsubmission_get_config ($id, $setting) {
+    global $DB;
+
+    $dbparams = array('assignment' => $id,
+                      'plugin' => 'mahara',
+                      'subtype' => 'assignsubmission',
+                      'name' => $setting);
+    $result = $DB->get_record('assign_plugin_config', $dbparams, '*', IGNORE_MISSING);
+    if ($result) {
+        return $result->value;
+    }
+    return false;
+}
